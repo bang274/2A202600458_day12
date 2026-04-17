@@ -1,33 +1,41 @@
-version: "3.9"
+version: '3.8'
 
 services:
-  agent:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - ENVIRONMENT=staging
-      - APP_NAME=Production AI Agent
-      - REDIS_URL=redis://redis:6379/0
-    env_file:
-      - .env.local
-    depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    restart: unless-stopped
-
   redis:
     image: redis:7-alpine
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    container_name: travelbuddy_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
-      retries: 3
+      timeout: 5s
+      retries: 5
+
+  agent:
+    build: .
+    container_name: travelbuddy_agent
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - AGENT_API_KEY=${AGENT_API_KEY:-your-secret-api-key}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+      - MONTHLY_BUDGET_USD=${MONTHLY_BUDGET_USD:-100.0}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - travelbuddy_network
+
+networks:
+  travelbuddy_network:
+    driver: bridge
+
+volumes:
+  redis_data:
